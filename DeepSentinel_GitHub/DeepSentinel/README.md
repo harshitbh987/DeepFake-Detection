@@ -1,4 +1,4 @@
-# 🔍 DeepSentinel — Deepfake Video Detection System
+# 🔍 Deepfake Video Detection System
 
 A production-ready deepfake video detection system using **EfficientNet-B0** and **MTCNN**, deployable on any local machine (Windows / Mac / Linux).
 
