@@ -1,0 +1,1537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>DeepSentinel — Deepfake Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ═══════════════════════════════════════════════
+   DeepSentinel UI — Redesigned
+   Aesthetic: Dark forensics tool with glass cards
+═══════════════════════════════════════════════ */
+:root {
+  --bg:         #050810;
+  --bg2:        #080c17;
+  --glass:      rgba(255,255,255,.035);
+  --glass-b:    rgba(255,255,255,.07);
+  --glass-h:    rgba(255,255,255,.055);
+  --card:       rgba(12,18,32,.8);
+  --card-b:     rgba(96,165,250,.12);
+
+  --real:       #4ade80;
+  --real-dim:   rgba(74,222,128,.15);
+  --real-glow:  0 0 20px rgba(74,222,128,.25);
+  --fake:       #f87171;
+  --fake-dim:   rgba(248,113,113,.15);
+  --fake-glow:  0 0 20px rgba(248,113,113,.25);
+  --accent:     #60a5fa;
+  --accent2:    #818cf8;
+  --amber:      #fbbf24;
+  --purple:     #a78bfa;
+
+  --t1: #f1f5f9;
+  --t2: #64748b;
+  --t3: #1e293b;
+  --muted: #475569;
+
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Inter', sans-serif;
+
+  --r: 8px;
+  --rl: 16px;
+  --rxl: 24px;
+  --shadow: 0 8px 32px rgba(0,0,0,.4);
+  --shadow-sm: 0 2px 12px rgba(0,0,0,.3);
+  --tr: .2s cubic-bezier(.4,0,.2,1);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--t1);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(96,165,250,.07) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 110%, rgba(129,140,248,.06) 0%, transparent 50%);
+  background-attachment: fixed;
+}
+
+/* ── SCROLLBAR ─────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--t3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ── NAV ──────────────────────────────────────── */
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background: rgba(5,8,16,.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.nav-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.brand { display: flex; align-items: center; gap: .6rem; }
+.brand-logo {
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px;
+  box-shadow: 0 0 16px rgba(96,165,250,.3);
+}
+.brand-text { display: flex; flex-direction: column; gap: 0; }
+.brand-name {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: .03em;
+  line-height: 1.2;
+}
+.brand-tagline {
+  font-size: 10px;
+  color: var(--t2);
+  letter-spacing: .08em;
+  line-height: 1;
+}
+.nav-right { display: flex; align-items: center; gap: .5rem; }
+.nav-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: .25rem .65rem;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,.08);
+  color: var(--t2);
+  letter-spacing: .05em;
+  background: var(--glass);
+}
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: .25rem .65rem;
+  border-radius: 20px;
+  background: var(--glass);
+  border: 1px solid rgba(255,255,255,.08);
+  color: var(--t2);
+}
+.status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--t3);
+  transition: background .3s, box-shadow .3s;
+}
+.status-dot.ok   { background: var(--real); box-shadow: 0 0 6px var(--real); }
+.status-dot.err  { background: var(--fake); }
+.status-dot.spin {
+  border: 1.5px solid var(--t3);
+  border-top-color: var(--accent);
+  animation: spin .7s linear infinite;
+  background: transparent;
+}
+
+/* ── HERO ─────────────────────────────────────── */
+.hero {
+  padding: 4rem 1.5rem 3.5rem;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent2) 70%, transparent);
+  opacity: .3;
+}
+.hero-inner { max-width: 1200px; margin: 0 auto; }
+.hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  color: var(--accent);
+  margin-bottom: 1.2rem;
+  opacity: .85;
+}
+.hero-kicker::before {
+  content: '';
+  width: 24px; height: 1px;
+  background: var(--accent);
+  opacity: .6;
+}
+.hero-title {
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-weight: 700;
+  letter-spacing: -.03em;
+  line-height: 1.1;
+  margin-bottom: 1.2rem;
+}
+.hero-title .line2 {
+  background: linear-gradient(120deg, var(--accent), var(--accent2) 60%, var(--purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 300;
+}
+.hero-desc {
+  font-size: 15px;
+  color: var(--t2);
+  max-width: 560px;
+  line-height: 1.8;
+  margin-bottom: 1.8rem;
+}
+.hero-chips { display: flex; gap: .5rem; flex-wrap: wrap; }
+.hero-chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: .3rem .7rem;
+  border-radius: 6px;
+  background: var(--glass);
+  border: 1px solid var(--glass-b);
+  color: var(--t2);
+  letter-spacing: .05em;
+  backdrop-filter: blur(8px);
+}
+
+/* ── MAIN ─────────────────────────────────────── */
+.main {
+  flex: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 5rem;
+  width: 100%;
+}
+
+/* ── GLASS CARD ───────────────────────────────── */
+.glass {
+  background: var(--card);
+  border: 1px solid var(--card-b);
+  border-radius: var(--rl);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow);
+}
+.glass-sm { border-radius: var(--r); }
+.glass:hover { border-color: rgba(96,165,250,.2); }
+
+/* ── SETTINGS PANEL ──────────────────────────── */
+.settings-panel {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1.2rem;
+  align-items: end;
+  margin-bottom: 1.5rem;
+  padding: 1.4rem 1.6rem;
+}
+.settings-left { display: flex; flex-direction: column; gap: .4rem; }
+.settings-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .15em;
+  color: var(--t2);
+}
+.slider-row { display: flex; align-items: center; gap: 1rem; }
+.frame-slider {
+  -webkit-appearance: none;
+  width: 220px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--t3);
+  outline: none;
+  cursor: pointer;
+  transition: background var(--tr);
+}
+.frame-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(96,165,250,.5);
+  transition: box-shadow var(--tr), transform var(--tr);
+}
+.frame-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 14px rgba(96,165,250,.7);
+}
+.frame-slider:hover { background: var(--muted); }
+.frame-value {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 2.5rem;
+  text-align: center;
+  line-height: 1;
+}
+.frame-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--t2);
+  letter-spacing: .08em;
+}
+.slider-marks {
+  display: flex;
+  justify-content: space-between;
+  width: 220px;
+  padding: 0 2px;
+}
+.slider-mark {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--t3);
+}
+
+/* ── UPLOAD ZONE ──────────────────────────────── */
+.drop-zone {
+  padding: 3rem 2rem;
+  text-align: center;
+  cursor: pointer;
+  border: 1.5px dashed rgba(96,165,250,.2);
+  transition: border-color var(--tr), background var(--tr), transform var(--tr);
+  position: relative;
+  overflow: hidden;
+}
+.drop-zone::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 60% 60% at 50% 0%, rgba(96,165,250,.04), transparent);
+  pointer-events: none;
+}
+.drop-zone:hover, .drop-zone.over {
+  border-color: rgba(96,165,250,.5);
+  background: rgba(96,165,250,.04);
+}
+.drop-zone.over { transform: scale(1.005); }
+#file-input { display: none; }
+.dz-icon-wrap {
+  width: 64px; height: 64px;
+  background: linear-gradient(135deg, rgba(96,165,250,.12), rgba(129,140,248,.08));
+  border: 1px solid rgba(96,165,250,.2);
+  border-radius: 18px;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 1.4rem;
+  color: var(--accent);
+  box-shadow: 0 0 24px rgba(96,165,250,.1);
+  transition: transform var(--tr), box-shadow var(--tr);
+}
+.drop-zone:hover .dz-icon-wrap {
+  transform: translateY(-2px);
+  box-shadow: 0 0 32px rgba(96,165,250,.2);
+}
+.dz-icon-wrap svg { width: 26px; height: 26px; }
+.dz-primary {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--t1);
+  margin-bottom: .4rem;
+}
+.dz-link {
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--tr);
+}
+.dz-link:hover { border-color: var(--accent); }
+.dz-hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--t2);
+  letter-spacing: .05em;
+  margin-bottom: 0;
+}
+.file-preview {
+  display: none;
+  margin-top: 2rem;
+  padding-top: 1.8rem;
+  border-top: 1px solid rgba(255,255,255,.06);
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2rem;
+}
+.file-preview.show { display: flex; }
+.file-info-chip {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  background: var(--glass);
+  border: 1px solid var(--glass-b);
+  border-radius: 10px;
+  padding: .6rem 1rem;
+  backdrop-filter: blur(8px);
+}
+.file-icon {
+  width: 34px; height: 34px;
+  background: linear-gradient(135deg, rgba(96,165,250,.15), rgba(129,140,248,.1));
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.file-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--t1);
+}
+.file-size {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--t2);
+}
+
+/* ── BUTTONS ──────────────────────────────────── */
+.btn-analyse {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #fff;
+  border: none;
+  border-radius: var(--r);
+  padding: .75rem 2.4rem;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(96,165,250,.3);
+  transition: opacity var(--tr), transform var(--tr), box-shadow var(--tr);
+  position: relative;
+  overflow: hidden;
+}
+.btn-analyse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,.15), transparent);
+  pointer-events: none;
+}
+.btn-analyse:hover {
+  opacity: .9;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 28px rgba(96,165,250,.4);
+}
+.btn-analyse:active { transform: translateY(0); }
+
+.btn-reset {
+  background: transparent;
+  color: var(--t2);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: var(--r);
+  padding: .6rem 1.8rem;
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color var(--tr), border-color var(--tr), background var(--tr);
+}
+.btn-reset:hover {
+  color: var(--t1);
+  border-color: rgba(255,255,255,.2);
+  background: var(--glass);
+}
+
+.btn-export {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--glass);
+  border: 1px solid var(--glass-b);
+  border-radius: 6px;
+  padding: .45rem 1rem;
+  color: var(--t2);
+  cursor: pointer;
+  transition: color var(--tr), border-color var(--tr), background var(--tr);
+}
+.btn-export:hover {
+  color: var(--t1);
+  border-color: rgba(255,255,255,.2);
+  background: var(--glass-h);
+}
+
+/* ── PROGRESS ─────────────────────────────────── */
+.prog-wrap { padding: 1.5rem 0; }
+.prog-card {
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  padding: 1.8rem 2rem;
+}
+.prog-spinner {
+  width: 36px; height: 36px;
+  border: 2.5px solid rgba(255,255,255,.08);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .75s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.prog-text {}
+.prog-title {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--t1);
+  margin-bottom: .2rem;
+}
+.prog-steps {
+  display: flex;
+  gap: .3rem;
+  margin-top: .5rem;
+}
+.prog-step {
+  width: 28px; height: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,.08);
+  transition: background .4s;
+}
+.prog-step.done { background: var(--accent); }
+.prog-step.active {
+  background: var(--accent);
+  animation: pulse-step 1s ease-in-out infinite;
+}
+@keyframes pulse-step {
+  0%,100% { opacity: 1; }
+  50%      { opacity: .4; }
+}
+
+/* ── HIDDEN ───────────────────────────────────── */
+.hidden { display: none !important; }
+
+/* ── VERDICT ──────────────────────────────────── */
+.verdict-banner {
+  border-radius: var(--rxl);
+  padding: 1.8rem 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.2rem;
+  position: relative;
+  overflow: hidden;
+  transition: all .5s cubic-bezier(.4,0,.2,1);
+}
+.verdict-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: .08;
+  transition: opacity .5s;
+}
+.verdict-banner.fake {
+  background: linear-gradient(135deg, rgba(248,113,113,.12), rgba(12,18,32,.9));
+  border: 1px solid rgba(248,113,113,.3);
+  box-shadow: var(--fake-glow), var(--shadow);
+}
+.verdict-banner.fake::before {
+  background: radial-gradient(ellipse 60% 80% at 0% 50%, var(--fake), transparent);
+}
+.verdict-banner.real {
+  background: linear-gradient(135deg, rgba(74,222,128,.10), rgba(12,18,32,.9));
+  border: 1px solid rgba(74,222,128,.25);
+  box-shadow: var(--real-glow), var(--shadow);
+}
+.verdict-banner.real::before {
+  background: radial-gradient(ellipse 60% 80% at 0% 50%, var(--real), transparent);
+}
+.v-left { display: flex; align-items: center; gap: 1.2rem; z-index: 1; }
+.v-indicator {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+}
+.v-indicator::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  opacity: .3;
+  animation: ring-pulse 2s ease-out infinite;
+}
+@keyframes ring-pulse {
+  0%   { transform: scale(1); opacity: .3; }
+  100% { transform: scale(2); opacity: 0; }
+}
+.v-indicator.fake { background: var(--fake); color: var(--fake); box-shadow: var(--fake-glow); }
+.v-indicator.real { background: var(--real); color: var(--real); box-shadow: var(--real-glow); }
+.v-text {}
+.v-eyebrow {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .2em;
+  color: var(--t2);
+  margin-bottom: .2rem;
+}
+.v-value {
+  font-family: var(--mono);
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  line-height: 1;
+}
+.v-value.fake { color: var(--fake); }
+.v-value.real { color: var(--real); }
+.v-stats { display: flex; gap: 2rem; flex-wrap: wrap; z-index: 1; }
+.v-stat { text-align: right; }
+.v-stat-val {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--t1);
+  line-height: 1.2;
+}
+.v-stat-lbl {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .12em;
+  color: var(--t2);
+}
+
+/* ── CHART SECTION LABEL ──────────────────────── */
+.section-lbl {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .2em;
+  color: var(--t2);
+  margin-bottom: .9rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.section-lbl::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255,255,255,.06), transparent);
+}
+
+/* ── CHARTS GRID ──────────────────────────────── */
+.charts-row {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.c-card { padding: 1.4rem; }
+.c-timeline { margin-bottom: 1rem; }
+.c-timeline canvas { max-height: 170px; }
+.bar-wrap { max-height: 240px; overflow-y: auto; padding-right: 4px; }
+.bar-wrap canvas { min-height: 180px; }
+
+/* ── GAUGE SVG ────────────────────────────────── */
+.gauge-wrap { display: flex; justify-content: center; padding: .4rem 0; }
+.gauge-svg { width: 100%; max-width: 210px; }
+.g-track   { stroke: rgba(255,255,255,.06); }
+.g-zr      { stroke: var(--real); }
+.g-zf      { stroke: var(--fake); }
+.g-arc     { transition: d .6s cubic-bezier(.4,0,.2,1), stroke .5s; }
+.g-needle  { stroke: rgba(255,255,255,.25); }
+.g-pivot   { fill: rgba(255,255,255,.3); }
+.g-marker  { fill: var(--amber); }
+.g-pct     { font-family: var(--mono); font-size: 20px; font-weight: 700; }
+.g-verdict { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; }
+.g-elbl    { font-family: var(--mono); font-size: 8px; fill: rgba(255,255,255,.2); }
+
+/* ── FRAMES INFO BAR ──────────────────────────── */
+.frames-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .8rem;
+}
+.frames-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--t2);
+  display: flex;
+  gap: .8rem;
+}
+.frames-count span { display: flex; align-items: center; gap: .3rem; }
+.dot-fake { width: 7px; height: 7px; border-radius: 50%; background: var(--fake); }
+.dot-real { width: 7px; height: 7px; border-radius: 50%; background: var(--real); }
+.dot-nof  { width: 7px; height: 7px; border-radius: 50%; background: var(--t3); }
+
+/* ── FRAME GRID ───────────────────────────────── */
+.frame-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: .85rem;
+  margin-bottom: 1.2rem;
+}
+.f-card {
+  background: rgba(255,255,255,.02);
+  border: 1px solid rgba(255,255,255,.05);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: transform var(--tr), border-color var(--tr), box-shadow var(--tr);
+  cursor: default;
+}
+.f-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-sm); }
+.f-card.fake  {
+  border-color: rgba(248,113,113,.3);
+  box-shadow: 0 0 12px rgba(248,113,113,.08);
+}
+.f-card.fake:hover { box-shadow: 0 0 20px rgba(248,113,113,.15); }
+.f-card.real  { border-color: rgba(74,222,128,.2); }
+.f-card.nof   { opacity: .45; }
+.f-img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.f-meta {
+  padding: .5rem .6rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.f-idx  { font-family: var(--mono); font-size: 9px; color: var(--t2); }
+.f-prob { font-family: var(--mono); font-size: 11px; font-weight: 600; }
+.f-prob.fake { color: var(--fake); }
+.f-prob.real { color: var(--real); }
+.f-prob.nof  { color: var(--t3); }
+
+/* ── SMART ALERT ──────────────────────────────── */
+.smart-alert {
+  display: none;
+  padding: 1rem 1.3rem;
+  border-radius: var(--r);
+  background: rgba(248,113,113,.06);
+  border: 1px solid rgba(248,113,113,.2);
+  margin-bottom: 1rem;
+}
+.smart-alert.show { display: block; }
+.smart-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fake);
+  margin-bottom: .5rem;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+.smart-items { display: flex; flex-direction: column; gap: .3rem; }
+.smart-item {
+  font-size: 12px;
+  color: var(--t2);
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.smart-item::before { content: '→'; color: var(--fake); font-family: var(--mono); }
+
+/* ── EXPORT ROW ───────────────────────────────── */
+.export-row { display: flex; gap: .6rem; margin-bottom: 1rem; flex-wrap: wrap; }
+
+/* ── RAW JSON ─────────────────────────────────── */
+.raw-wrap { margin-bottom: 1rem; }
+.raw-toggle {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--t2);
+  cursor: pointer;
+  padding: .4rem 0;
+  list-style: none;
+  letter-spacing: .06em;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  transition: color var(--tr);
+}
+.raw-toggle:hover { color: var(--t1); }
+.raw-toggle::marker { display: none; }
+.raw-pre {
+  margin-top: .5rem;
+  background: rgba(0,0,0,.3);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: var(--r);
+  padding: 1rem;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--t2);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  line-height: 1.65;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* ── RESET ────────────────────────────────────── */
+.reset-row { display: flex; justify-content: center; padding-top: .8rem; }
+
+/* ── ERROR ────────────────────────────────────── */
+.err-wrap { padding: 1rem 0; }
+.err-card { padding: 2.5rem 2rem; text-align: center; }
+.err-icon { font-size: 28px; color: var(--fake); margin-bottom: .8rem; opacity: .8; }
+.err-msg {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--t2);
+  margin-bottom: 1.5rem;
+  line-height: 1.7;
+}
+
+/* ── FOOTER ───────────────────────────────────── */
+footer {
+  border-top: 1px solid rgba(255,255,255,.05);
+  padding: 1.2rem 1.5rem;
+}
+.foot-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  gap: .5rem;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: rgba(255,255,255,.12);
+}
+.foot-sep { opacity: .3; }
+
+/* ── RESPONSIVE ───────────────────────────────── */
+@media (max-width: 768px) {
+  .charts-row { grid-template-columns: 1fr; }
+  .verdict-banner { flex-direction: column; align-items: flex-start; }
+  .v-stats { gap: 1.2rem; }
+  .v-stat { text-align: left; }
+  .nav-right .nav-badge { display: none; }
+  .hero-title { font-size: 2rem; }
+  .settings-panel { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="brand">
+      <div class="brand-logo">◈</div>
+      <div class="brand-text">
+        <div class="brand-name">DeepSentinel</div>
+        <div class="brand-tagline">DEEPFAKE DETECTION</div>
+      </div>
+    </div>
+    <div class="nav-right">
+      <span class="nav-badge">EfficientNet-B0</span>
+      <span class="nav-badge">MTCNN</span>
+      <div class="status-pill">
+        <div class="status-dot spin" id="status-dot"></div>
+        <span id="status-lbl">connecting…</span>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-kicker">FORENSIC VIDEO ANALYSIS</div>
+    <h1 class="hero-title">
+      Detect deepfake content<br/>
+      <span class="line2">with precision &amp; clarity</span>
+    </h1>
+    <p class="hero-desc">
+      Upload a video clip. DeepSentinel samples frames uniformly, detects and
+      crops faces with MTCNN, and scores each crop with a fine-tuned
+      EfficientNet-B0 classifier to produce a final REAL&nbsp;/&nbsp;FAKE verdict.
+    </p>
+    <div class="hero-chips">
+      <span class="hero-chip">Transfer Learning</span>
+      <span class="hero-chip">Uniform Frame Sampling</span>
+      <span class="hero-chip">Confidence-Weighted Score</span>
+      <span class="hero-chip">Smart Spike Detection</span>
+      <span class="hero-chip">JSON + CSV Export</span>
+    </div>
+  </div>
+</section>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- Upload section -->
+  <div id="upload-sec">
+
+    <!-- Settings panel -->
+    <div class="glass settings-panel" style="margin-bottom:1rem;">
+      <div class="settings-left">
+        <div class="settings-label">FRAMES TO SAMPLE</div>
+        <div class="slider-row">
+          <input type="range" class="frame-slider" id="frame-slider"
+                 min="4" max="24" step="2" value="12"/>
+          <div>
+            <div class="frame-value" id="frame-val">12</div>
+            <div class="frame-label">FRAMES</div>
+          </div>
+        </div>
+        <div class="slider-marks" style="width:220px;">
+          <span class="slider-mark">4</span>
+          <span class="slider-mark">8</span>
+          <span class="slider-mark">12</span>
+          <span class="slider-mark">16</span>
+          <span class="slider-mark">20</span>
+          <span class="slider-mark">24</span>
+        </div>
+      </div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--t2);
+                  text-align:right;line-height:1.8;">
+        More frames → slower but<br/>more accurate detection
+      </div>
+    </div>
+
+    <!-- Drop zone -->
+    <div class="glass drop-zone" id="drop-zone">
+      <input type="file" id="file-input" accept=".mp4,.avi,.mov,.mkv,.webm"/>
+      <div class="dz-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+      </div>
+      <p class="dz-primary">
+        Drop video here or
+        <label for="file-input" class="dz-link">browse files</label>
+      </p>
+      <p class="dz-hint">MP4 · AVI · MOV · MKV · WEBM &nbsp;/&nbsp; Max 200 MB</p>
+
+      <div class="file-preview" id="file-preview">
+        <div class="file-info-chip">
+          <div class="file-icon">▶</div>
+          <div>
+            <div class="file-name" id="file-name">—</div>
+            <div class="file-size" id="file-size">—</div>
+          </div>
+        </div>
+        <button class="btn-analyse" id="run-btn">
+          ▶&nbsp; Run Analysis
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="glass prog-wrap hidden" id="prog-sec">
+    <div class="prog-card">
+      <div class="prog-spinner"></div>
+      <div class="prog-text">
+        <div class="prog-title" id="prog-title">Initialising…</div>
+        <div class="prog-steps">
+          <div class="prog-step" id="ps1"></div>
+          <div class="prog-step" id="ps2"></div>
+          <div class="prog-step" id="ps3"></div>
+          <div class="prog-step" id="ps4"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="hidden" id="results-sec">
+
+    <!-- Verdict banner -->
+    <div class="verdict-banner" id="verdict-banner">
+      <div class="v-left">
+        <div class="v-indicator" id="v-indicator"></div>
+        <div class="v-text">
+          <div class="v-eyebrow">ANALYSIS VERDICT</div>
+          <div class="v-value" id="v-value">—</div>
+        </div>
+      </div>
+      <div class="v-stats">
+        <div class="v-stat">
+          <div class="v-stat-val" id="vs-score">—</div>
+          <div class="v-stat-lbl">WEIGHTED SCORE</div>
+        </div>
+        <div class="v-stat">
+          <div class="v-stat-val" id="vs-conf">—</div>
+          <div class="v-stat-lbl">CONFIDENCE</div>
+        </div>
+        <div class="v-stat">
+          <div class="v-stat-val" id="vs-faces">—</div>
+          <div class="v-stat-lbl">FACES FOUND</div>
+        </div>
+        <div class="v-stat">
+          <div class="v-stat-val" id="vs-frames">—</div>
+          <div class="v-stat-lbl">FRAMES USED</div>
+        </div>
+        <div class="v-stat">
+          <div class="v-stat-val" id="vs-time">—</div>
+          <div class="v-stat-lbl">ELAPSED</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Smart alert -->
+    <div class="smart-alert" id="smart-alert">
+      <div class="smart-title">⚡ Additional Signals Detected</div>
+      <div class="smart-items" id="smart-items"></div>
+    </div>
+
+    <!-- Charts -->
+    <div class="section-lbl">ANALYSIS CHARTS</div>
+    <div class="charts-row">
+      <div class="glass c-card">
+        <div class="section-lbl" style="font-size:8px;">SCORE METER</div>
+        <div class="gauge-wrap">
+          <svg class="gauge-svg" viewBox="0 0 210 130">
+            <path class="g-track"
+              d="M 22 118 A 85 85 0 0 1 188 118"
+              fill="none" stroke-width="12" stroke-linecap="round"/>
+            <path class="g-zr"
+              d="M 22 118 A 85 85 0 0 1 105 33"
+              fill="none" stroke-width="12" stroke-linecap="round" opacity=".15"/>
+            <path class="g-zf"
+              d="M 105 33 A 85 85 0 0 1 188 118"
+              fill="none" stroke-width="12" stroke-linecap="round" opacity=".15"/>
+            <circle cx="105" cy="33" r="4" class="g-marker"/>
+            <path id="g-arc" class="g-arc"
+              d="M 22 118 A 85 85 0 0 1 22 118"
+              fill="none" stroke-width="12" stroke-linecap="round"/>
+            <line id="g-needle" x1="105" y1="118" x2="105" y2="42"
+              class="g-needle" stroke-width="2"/>
+            <circle cx="105" cy="118" r="6" class="g-pivot"/>
+            <text id="g-pct" x="105" y="96"
+              class="g-pct" text-anchor="middle" fill="#f1f5f9">—</text>
+            <text id="g-verdict-lbl" x="105" y="112"
+              class="g-verdict" text-anchor="middle" fill="rgba(100,116,139,.8)">—</text>
+            <text x="24"  y="128" class="g-elbl" text-anchor="middle">0%</text>
+            <text x="186" y="128" class="g-elbl" text-anchor="middle">100%</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="glass c-card">
+        <div class="section-lbl" style="font-size:8px;">FRAME-LEVEL SCORES</div>
+        <div class="bar-wrap">
+          <canvas id="bar-chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="glass c-card c-timeline">
+      <div class="section-lbl" style="font-size:8px;">SCORE TIMELINE</div>
+      <canvas id="tl-chart"></canvas>
+    </div>
+
+    <!-- Frame grid -->
+    <div class="section-lbl">SAMPLED FRAMES</div>
+    <div class="frames-bar">
+      <div class="frames-count" id="frames-count-bar"></div>
+    </div>
+    <div class="frame-grid" id="frame-grid"></div>
+
+    <!-- Export -->
+    <div class="export-row">
+      <button class="btn-export" id="dl-json">⬇&nbsp; Export JSON</button>
+      <button class="btn-export" id="dl-csv">⬇&nbsp; Export CSV</button>
+    </div>
+
+    <!-- Raw JSON -->
+    <details class="raw-wrap">
+      <summary class="raw-toggle">{ } Raw JSON Response</summary>
+      <pre class="raw-pre" id="raw-json"></pre>
+    </details>
+
+    <div class="reset-row">
+      <button class="btn-reset" id="reset-btn">← Analyse Another Video</button>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div class="hidden err-wrap" id="err-sec">
+    <div class="glass err-card">
+      <div class="err-icon">⚠</div>
+      <div class="err-msg" id="err-msg">Something went wrong.</div>
+      <button class="btn-reset" id="err-retry">Try Again</button>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <div class="foot-inner">
+    <span>DeepSentinel</span>
+    <span class="foot-sep">·</span>
+    <span>EfficientNet-B0 + MTCNN</span>
+    <span class="foot-sep">·</span>
+    <span>Academic Research Project</span>
+  </div>
+</footer>
+
+<script>
+'use strict';
+
+// ── Constants ────────────────────────────────────────────
+const DT    = 0.50;
+const REAL  = '#4ade80', FAKE  = '#f87171';
+const BLUE  = '#818cf8', AMBER = '#fbbf24', MUTED = '#475569';
+const BG    = 'rgba(12,18,32,.8)', GRID = 'rgba(255,255,255,.05)';
+const FONT  = { family: "'JetBrains Mono'", size: 10 };
+
+let file = null, barC = null, tlC = null, _data = null;
+
+// ── DOM shortcuts ─────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const sections = ['upload-sec','prog-sec','results-sec','err-sec'];
+function show(id) {
+  sections.forEach(s => $(s).classList.add('hidden'));
+  $(id).classList.remove('hidden');
+}
+
+// ── Frame slider ──────────────────────────────────────────
+const slider = $('frame-slider'), fval = $('frame-val');
+slider.addEventListener('input', () => {
+  fval.textContent = slider.value;
+  // Colour track
+  const pct = (slider.value - slider.min) / (slider.max - slider.min) * 100;
+  slider.style.background =
+    `linear-gradient(90deg, #60a5fa ${pct}%, rgba(255,255,255,.1) ${pct}%)`;
+});
+// Init
+slider.dispatchEvent(new Event('input'));
+
+// ── Health check ──────────────────────────────────────────
+async function checkHealth() {
+  const dot = $('status-dot'), lbl = $('status-lbl');
+  try {
+    const d = await fetch('/health').then(r => r.json());
+    dot.className = d.model_loaded ? 'status-dot ok' : 'status-dot err';
+    lbl.textContent = d.model_loaded ? 'model ready' : 'model not loaded';
+  } catch {
+    dot.className = 'status-dot err';
+    lbl.textContent = 'server offline';
+  }
+}
+checkHealth();
+setInterval(checkHealth, 30000);
+
+// ── File selection ────────────────────────────────────────
+$('file-input').addEventListener('change', () => {
+  if ($('file-input').files[0]) pick($('file-input').files[0]);
+});
+const dz = $('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f) { const dt = new DataTransfer(); dt.items.add(f);
+           $('file-input').files = dt.files; pick(f); }
+});
+
+function pick(f) {
+  file = f;
+  $('file-name').textContent = f.name;
+  $('file-size').textContent = fmt(f.size);
+  $('file-preview').classList.add('show');
+}
+
+// ── Progress stepper ──────────────────────────────────────
+const progSteps = [
+  [0,    'ps1', 'Uploading video…'],
+  [800,  'ps2', 'Sampling frames…'],
+  [2500, 'ps3', 'Detecting faces…'],
+  [5500, 'ps4', 'Classifying crops…'],
+];
+let progTimers = [];
+function startProgress() {
+  progTimers.forEach(clearTimeout);
+  progTimers = [];
+  ['ps1','ps2','ps3','ps4'].forEach(id => {
+    $(id).className = 'prog-step';
+  });
+  progSteps.forEach(([delay, stepId, label], i) => {
+    const t = setTimeout(() => {
+      $('prog-title').textContent = label;
+      // Mark previous steps done, current active
+      for (let j = 0; j < i; j++)
+        $(progSteps[j][1]).className = 'prog-step done';
+      $(stepId).className = 'prog-step active';
+    }, delay);
+    progTimers.push(t);
+  });
+}
+
+// ── Run analysis ──────────────────────────────────────────
+$('run-btn').addEventListener('click', run);
+async function run() {
+  if (!file) return;
+  show('prog-sec');
+  startProgress();
+
+  const fd = new FormData();
+  fd.append('video', file);
+  fd.append('num_frames', slider.value);
+
+  try {
+    const res  = await fetch('/analyse', { method: 'POST', body: fd });
+    const data = await res.json();
+    progTimers.forEach(clearTimeout);
+    if (!res.ok) { showErr(data.error || `Server error ${res.status}`); return; }
+    _data = data;
+    render(data);
+    show('results-sec');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch(e) {
+    progTimers.forEach(clearTimeout);
+    showErr('Network error: ' + e.message);
+  }
+}
+
+// ── Render results ────────────────────────────────────────
+function render(d) {
+  const DT2  = d.decision_boundary || DT;
+  const fake = d.weighted_score >= DT2;
+  const vc   = fake ? FAKE : REAL;
+
+  // Verdict banner
+  const banner = $('verdict-banner');
+  banner.className = 'verdict-banner ' + (fake ? 'fake' : 'real');
+  const ind = $('v-indicator');
+  ind.className = 'v-indicator ' + (fake ? 'fake' : 'real');
+  const vv = $('v-value');
+  vv.textContent = d.verdict;
+  vv.className   = 'v-value ' + (fake ? 'fake' : 'real');
+
+  $('vs-score').textContent  = (d.weighted_score * 100).toFixed(1) + '%';
+  $('vs-conf').textContent   = d.confidence_tier;
+  $('vs-faces').textContent  = `${d.frames_with_face}/${d.frames_analysed}`;
+  $('vs-frames').textContent = d.num_frames_used || d.frames_analysed;
+  $('vs-time').textContent   = d.elapsed_sec + 's';
+
+  renderGauge(d.weighted_score, fake, vc, DT2, d.verdict);
+  renderBar(d.frames, DT2);
+  renderTimeline(d.frames, DT2);
+  renderGrid(d.frames, DT2);
+  smartAnalysis(d.frames, DT2);
+  $('raw-json').textContent = JSON.stringify(d, null, 2);
+
+  // Frame count summary
+  const nf   = d.frames.filter(f => f.fake_prob >= DT2).length;
+  const nr   = d.frames.filter(f => f.has_face && f.fake_prob < DT2).length;
+  const nnof = d.frames.filter(f => !f.has_face).length;
+  $('frames-count-bar').innerHTML =
+    `<span><div class="dot-fake"></div> Fake: ${nf}</span>` +
+    `<span><div class="dot-real"></div> Real: ${nr}</span>` +
+    (nnof ? `<span><div class="dot-nof"></div> No face: ${nnof}</span>` : '');
+}
+
+// ── Gauge ─────────────────────────────────────────────────
+function renderGauge(score, fake, col, DT2, verdict) {
+  const cx=105, cy=118, r=85;
+  const end = Math.PI - score * Math.PI;
+  const x1  = cx + r * Math.cos(Math.PI);
+  const y1  = cy + r * Math.sin(Math.PI);
+  const x2  = cx + r * Math.cos(end);
+  const y2  = cy + r * Math.sin(end);
+  const lg  = score > .5 ? 1 : 0;
+  const d   = score < .001
+    ? `M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x1+.001} ${y1}`
+    : `M ${x1} ${y1} A ${r} ${r} 0 ${lg} 1 ${x2} ${y2}`;
+  const arc = $('g-arc');
+  arc.setAttribute('d', d);
+  arc.setAttribute('stroke', col);
+
+  // Needle
+  const nx = cx + (r-20) * Math.cos(end);
+  const ny = cy + (r-20) * Math.sin(end);
+  $('g-needle').setAttribute('x2', nx.toFixed(1));
+  $('g-needle').setAttribute('y2', ny.toFixed(1));
+
+  // Text
+  const pct = $('g-pct');
+  pct.textContent = (score*100).toFixed(1) + '%';
+  pct.setAttribute('fill', col);
+  $('g-verdict-lbl').textContent = verdict;
+  $('g-verdict-lbl').setAttribute('fill', col);
+}
+
+// ── Bar chart ─────────────────────────────────────────────
+function renderBar(frames, DT2) {
+  if (barC) { barC.destroy(); barC = null; }
+  const valid  = frames.filter(f => f.fake_prob !== null);
+  const labels = valid.map(f => `F${f.frame_index}`);
+  const vals   = valid.map(f => +(f.fake_prob * 100).toFixed(1));
+  const cols   = vals.map(v =>
+    v >= DT2*100 ? FAKE + 'cc' : REAL + 'cc'
+  );
+  const canvas = $('bar-chart');
+  canvas.height = Math.max(180, valid.length * 26);
+
+  barC = new Chart(canvas, {
+    type: 'bar',
+    data: { labels, datasets: [{
+      data: vals,
+      backgroundColor: cols,
+      borderColor: vals.map(v => v >= DT2*100 ? FAKE : REAL),
+      borderWidth: 1,
+      borderRadius: 4,
+      barThickness: 14,
+    }]},
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(5,8,16,.95)',
+          borderColor: 'rgba(255,255,255,.1)',
+          borderWidth: 1,
+          callbacks: {
+            label: c => ` ${c.raw.toFixed(1)}% fake probability`
+          }
+        }
+      },
+      scales: {
+        x: {
+          min: 0, max: 105,
+          grid: { color: GRID },
+          ticks: { color: MUTED, font: FONT, callback: v => v + '%' },
+          border: { color: 'rgba(255,255,255,.05)' }
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: MUTED, font: FONT },
+          border: { color: 'rgba(255,255,255,.05)' }
+        }
+      }
+    },
+    plugins: [{
+      id: 'dtLine',
+      afterDraw(c) {
+        const { ctx, scales: { x } } = c;
+        const xp = x.getPixelForValue(DT2*100);
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(xp, c.chartArea.top);
+        ctx.lineTo(xp, c.chartArea.bottom);
+        ctx.strokeStyle = AMBER + '99';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }]
+  });
+}
+
+// ── Timeline chart ────────────────────────────────────────
+function renderTimeline(frames, DT2) {
+  if (tlC) { tlC.destroy(); tlC = null; }
+  const sorted = [...frames].sort((a,b) => a.frame_index - b.frame_index);
+  const labels = sorted.map(f => String(f.frame_index));
+  const vals   = sorted.map(f =>
+    f.fake_prob !== null ? +(f.fake_prob*100).toFixed(1) : null
+  );
+  const ptCols = vals.map(v =>
+    v === null ? MUTED : v >= DT2*100 ? FAKE : REAL
+  );
+
+  tlC = new Chart($('tl-chart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: vals,
+        borderColor: BLUE + 'bb',
+        borderWidth: 2,
+        pointBackgroundColor: ptCols,
+        pointBorderColor: ptCols,
+        pointRadius: 5,
+        pointHoverRadius: 8,
+        fill: {
+          target: 'origin',
+          above: BLUE + '10',
+          below: BLUE + '08'
+        },
+        tension: 0.35,
+        spanGaps: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(5,8,16,.95)',
+          borderColor: 'rgba(255,255,255,.1)',
+          borderWidth: 1,
+          callbacks: {
+            label: c => c.raw !== null
+              ? ` ${c.raw.toFixed(1)}% fake probability`
+              : ' no face detected'
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: GRID },
+          ticks: { color: MUTED, font: FONT },
+          title: {
+            display: true,
+            text: 'Frame Index',
+            color: MUTED,
+            font: FONT
+          },
+          border: { color: 'rgba(255,255,255,.05)' }
+        },
+        y: {
+          min: 0, max: 100,
+          grid: { color: GRID },
+          ticks: {
+            color: MUTED,
+            font: FONT,
+            callback: v => v + '%'
+          },
+          border: { color: 'rgba(255,255,255,.05)' }
+        }
+      }
+    },
+    plugins: [{
+      id: 'tlDt',
+      afterDraw(c) {
+        const { ctx, scales: { y } } = c;
+        const yp = y.getPixelForValue(DT2*100);
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(c.chartArea.left, yp);
+        ctx.lineTo(c.chartArea.right, yp);
+        ctx.strokeStyle = AMBER + '88';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }]
+  });
+}
+
+// ── Frame grid ────────────────────────────────────────────
+function renderGrid(frames, DT2) {
+  const grid = $('frame-grid');
+  grid.innerHTML = '';
+  frames.forEach(f => {
+    const prob = f.fake_prob;
+    const fake = prob !== null && prob >= DT2;
+    const nof  = !f.has_face;
+    const cls  = nof ? 'f-card nof' : fake ? 'f-card fake' : 'f-card real';
+
+    let scoreHtml;
+    if (prob === null)    scoreHtml = `<span class="f-prob nof">—</span>`;
+    else if (fake)        scoreHtml = `<span class="f-prob fake">${(prob*100).toFixed(1)}%</span>`;
+    else                  scoreHtml = `<span class="f-prob real">${(prob*100).toFixed(1)}%</span>`;
+
+    const el = document.createElement('div');
+    el.className = cls;
+    el.innerHTML = `
+      <img class="f-img"
+           src="data:image/jpeg;base64,${f.thumbnail}"
+           alt="Frame ${f.frame_index}" loading="lazy"/>
+      <div class="f-meta">
+        <span class="f-idx">F${f.frame_index}</span>
+        ${scoreHtml}
+      </div>`;
+    grid.appendChild(el);
+  });
+}
+
+// ── Smart analysis ────────────────────────────────────────
+function smartAnalysis(frames, DT2) {
+  const valid  = frames.filter(f => f.has_face && f.fake_prob > 0.01);
+  if (!valid.length) return;
+  const scores = valid.map(f => f.fake_prob).sort((a,b) => b-a);
+  const maxS   = scores[0];
+  const top3   = scores.slice(0,3).reduce((s,v) => s+v, 0) / Math.min(3, scores.length);
+  const susp   = frames.filter(f => f.fake_prob >= 0.70);
+  const alert  = $('smart-alert');
+  const items  = $('smart-items');
+
+  if (maxS >= 0.85 || top3 >= 0.65 || susp.length >= 2) {
+    items.innerHTML = [
+      `Highest frame score: <b>${(maxS*100).toFixed(1)}%</b>`,
+      `Top-3 frame average: <b>${(top3*100).toFixed(1)}%</b>`,
+      `Frames above 70%:    <b>${susp.length}</b>`,
+      maxS >= 0.85 ? `Strong fake signal detected — consider verdict: FAKE` : null,
+    ].filter(Boolean)
+     .map(t => `<div class="smart-item">${t}</div>`)
+     .join('');
+    alert.classList.add('show');
+  } else {
+    alert.classList.remove('show');
+  }
+}
+
+// ── Exports ───────────────────────────────────────────────
+$('dl-json').addEventListener('click', () => {
+  if (!_data) return;
+  dl(new Blob([JSON.stringify(_data, null, 2)], { type: 'application/json' }),
+     `deepsentinel_${file.name.replace(/\.[^.]+$/,'')}.json`);
+});
+$('dl-csv').addEventListener('click', () => {
+  if (!_data) return;
+  const DT2 = _data.decision_boundary || DT;
+  const rows = [['frame_index','fake_prob','has_face','verdict']];
+  _data.frames.forEach(f => {
+    const v = f.fake_prob === null ? 'no_face'
+            : f.fake_prob >= DT2 ? 'FAKE' : 'REAL';
+    rows.push([f.frame_index, f.fake_prob, f.has_face, v]);
+  });
+  dl(new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' }),
+     `deepsentinel_${file.name.replace(/\.[^.]+$/,'')}.csv`);
+});
+function dl(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ── Reset / error ─────────────────────────────────────────
+function showErr(msg) { $('err-msg').textContent = msg; show('err-sec'); }
+function reset() {
+  file = null; _data = null;
+  $('file-input').value = '';
+  $('file-preview').classList.remove('show');
+  show('upload-sec');
+}
+$('reset-btn').addEventListener('click', reset);
+$('err-retry').addEventListener('click', reset);
+
+// ── Utility ───────────────────────────────────────────────
+function fmt(b) {
+  if (b < 1024)    return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+</script>
+</body>
+</html>
